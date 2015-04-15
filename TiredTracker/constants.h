@@ -12,6 +12,6 @@ const std::string rightEyeWin = "Right eye";
 const std::string leftEyeFloatWin = "Left eye float";
 const std::string rightEyeFloatWin = "Right eye float";
 
-const std::string frontalFacePath = "C:\\opencv\\sources\\data\\haarcascades\\haarcascade_frontalface_alt.xml";
+const std::string frontalFacePath = "C:\\opencv\\sources\\data\\haarcascades\\haarcascade_frontalface_alt2.xml";
 
 #endif

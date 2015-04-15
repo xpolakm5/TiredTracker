@@ -8,6 +8,8 @@
 #include <opencv2\video\tracking.hpp>
 #include "constants.h"
 
+#include "opencv2/opencv.hpp"
+
 using namespace cv;
 using namespace std;
 
@@ -47,7 +49,7 @@ int main()
 		capture >> cap_img;
 
 		if (cap_img.empty()) {												//sometimes first or second image from camera is empty (camera is loading)
-			cout << "is empty";
+			cout << "captured image is empty";
 			continue;
 		}
 
@@ -73,17 +75,44 @@ int main()
 	return 0;
 }
 
-
+float euclideanDist(Point& p, Point& q) {
+	Point diff = p - q;
+	return cv::sqrt(diff.x*diff.x + diff.y*diff.y);
+}
 
 void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color)
 {
+	//float flx = 0;
+	//float fly = 0;
 	for (int y = 0; y < cflowmap.rows; y += step)
+	{
 		for (int x = 0; x < cflowmap.cols; x += step)
 		{
-		const Point2f& fxy = flow.at<Point2f>(y, x);
-		line(cflowmap, Point(x, y), Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
-		//circle(cflowmap, Point(x, y), 2, color, -1);
+			const Point2f& fxy = flow.at<Point2f>(y, x);
+
+			int x2 = cvRound(x + fxy.x);
+			int y2 = cvRound(y + fxy.y);
+
+			//line(cflowmap, Point(x, y), Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
+			//circle(cflowmap, Point(x, y), 2, color, -1);
+			//float flx = x - fxy.x;
+			//cout << fxy.x;
+			//cout << "\n";
+			float distance = euclideanDist(Point(x, y), Point(x2, y2));
+			//cout << distance;
+
+			if (distance > 1.5) {
+				if (fxy.y < 0) {
+					line(cflowmap, Point(x, y), Point(x2, y2), CV_RGB(0, 0, 255));			//modre, ukazuje pohyb smerom vlavo (fxy.x < 0) alebo hore (fxy.y < 0)
+					//circle(cflowmap, Point(x, y), 2, color, -1);
+				}
+				else {
+					line(cflowmap, Point(x, y), Point(x2, y2), color);
+				}
+			}
 		}
+	}
+
 }
 
 void findEyes(Mat frame_gray, Rect face) {
@@ -104,6 +133,9 @@ void findEyes(Mat frame_gray, Rect face) {
 	//imshow(myWholeFaceWin, newFace);
 
 	Mat leftEye = faceROI(leftEyeRegion);
+
+	/*circle(leftEye, Point(30, 30), 30, CV_RGB(255, 255, 255), 20, 8, 0);*/
+
 	Mat rightEye = faceROI(rightEyeRegion);
 
 	//imshow(leftEyeWin, leftEye);
@@ -115,13 +147,37 @@ void findEyes(Mat frame_gray, Rect face) {
 	{
 		Mat flow, cflow;
 
+		//Mat Transform;
+		//Mat Transform_avg = Mat::eye(2, 3, CV_64FC1);
+		//Mat warped;
+		//Transform = estimateRigidTransform(leftEye, prevgray, 0);
+		//Transform(Range(0, 2), Range(0, 2)) = Mat::eye(2, 2, CV_64FC1);
+		//Transform_avg += (Transform - Transform_avg) / 2.0;
+		//warpAffine(leftEye, warped, Transform_avg, Size(leftEye.cols, leftEye.rows));
+
+		//imshow("Camw", warped);
+
 		resize(leftEye, leftEye, prevgray.size());
-		calcOpticalFlowFarneback(prevgray, leftEye, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
-		cvtColor(prevgray, cflow, CV_GRAY2BGR);
-		//drawOptFlowMap(flow, cflow, 16, 1.5, CV_RGB(0, 255, 0));
-		drawOptFlowMap(flow, cflow, 6, 0, CV_RGB(0, 255, 0));
-		imshow(leftEyeFloatWin , cflow);
+
+		//circle(leftEye, Point(prevgray.size().width / 2, prevgray.size().height / 2), 45, CV_RGB(0, 0, 0), 40, 8, 0);
+
+		//calcOpticalFlowFarneback(prevgray, leftEye, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
+		//cvtColor(prevgray, cflow, CV_GRAY2BGR);
+		////drawOptFlowMap(flow, cflow, 16, 1.5, CV_RGB(0, 255, 0));
+		//drawOptFlowMap(flow, cflow, 4, 0, CV_RGB(0, 255, 0));
+		//imshow(leftEyeFloatWin, cflow);
+		////imshow("flow", flow);
+
+		imshow(leftEyeFloatWin + "1", leftEye);
+
+		cv::threshold(leftEye, leftEye, 50, 120, cv::THRESH_BINARY);
+
+		imshow(leftEyeFloatWin, leftEye);
 	}
 
+	
 	swap(prevgray, leftEye);
+	
+
+	
 }
