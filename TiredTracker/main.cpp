@@ -35,6 +35,7 @@ int main()
 	namedWindow(leftEyeFloatWin, CV_WINDOW_NORMAL);
 	moveWindow(leftEyeFloatWin, 10, 100);
 
+
 	VideoCapture capture(0);
 	if (!capture.isOpened())
 	{
@@ -58,7 +59,7 @@ int main()
 		cvtColor(cap_img, gray_img, CV_BGR2GRAY);
 		equalizeHist(gray_img, gray_img);
 
-		face_cascade.detectMultiScale(gray_img, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE | CV_HAAR_FIND_BIGGEST_OBJECT, Size(150, 150));
+		face_cascade.detectMultiScale(gray_img, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE | CV_HAAR_FIND_BIGGEST_OBJECT, Size(150, 150), Size(200, 200));
 
 		for (int i = 0; i < faces.size(); i++)
 		{
@@ -159,7 +160,7 @@ void findEyes(Mat frame_gray, Rect face) {
 
 		resize(leftEye, leftEye, prevgray.size());
 
-		//circle(leftEye, Point(prevgray.size().width / 2, prevgray.size().height / 2), 45, CV_RGB(0, 0, 0), 40, 8, 0);
+		circle(leftEye, Point(prevgray.size().width / 2, prevgray.size().height / 2), 45, CV_RGB(255, 255, 255), 40, 8, 0);
 
 		//calcOpticalFlowFarneback(prevgray, leftEye, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
 		//cvtColor(prevgray, cflow, CV_GRAY2BGR);
@@ -170,7 +171,32 @@ void findEyes(Mat frame_gray, Rect face) {
 
 		imshow(leftEyeFloatWin + "1", leftEye);
 
-		cv::threshold(leftEye, leftEye, 50, 120, cv::THRESH_BINARY);
+		int darkestPixel = 255;			// 255 - white, 0 - black
+
+		for (int j = 0; j<leftEye.rows; j++)
+		{
+			for (int i = 0; i<leftEye.cols; i++)
+			{
+				if (leftEye.at<uchar>(j, i) < darkestPixel) {
+					darkestPixel = leftEye.at<uchar>(j, i);
+				}
+			}
+		}
+
+		for (int j = 0; j<leftEye.rows; j++)
+		{
+			for (int i = 0; i<leftEye.cols; i++)
+			{
+				if (leftEye.at<uchar>(j, i) < darkestPixel + 1) {			//if the pixel is darker
+					leftEye.at<uchar>(j, i) = 0;
+				}
+			}
+		}
+
+		cout << darkestPixel;
+		cout << "\n";
+
+		cv::threshold(leftEye, leftEye, 0, 100, cv::THRESH_BINARY);
 
 		imshow(leftEyeFloatWin, leftEye);
 	}
