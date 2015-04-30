@@ -15,25 +15,34 @@ using namespace std;
 
 Mat prevgray;
 
-void findEyes(Mat frame_gray, Rect face);
+void findEyes(Mat frame_gray, Rect face, CascadeClassifier cascEye);
 void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color);
 
 int main()
 {
-	CascadeClassifier face_cascade, eye_cascade;
-	if (!face_cascade.load(frontalFacePath)) {
+	CascadeClassifier cascFace, cascEye;
+	if (!cascFace.load(frontalFacePath)) {
 		printf("Error loading cascade file for face");
 		return 1;
 	}
+	if (!cascEye.load(eyePath)) {
+		printf("Error loading cascade file for eye");
+		return 1;
+	}
 
-	namedWindow(myWholeFaceWin, CV_WINDOW_NORMAL);
-	moveWindow(myWholeFaceWin, 10, 100);
-	//namedWindow(leftEyeWin, CV_WINDOW_NORMAL);
-	//moveWindow(leftEyeWin, 10, 100);
-	//namedWindow(rightEyeWin, CV_WINDOW_NORMAL);
-	//moveWindow(rightEyeWin, 10, 100);
+	//namedWindow(myWholeFaceWin, CV_WINDOW_NORMAL);
+	//moveWindow(myWholeFaceWin, 10, 100);
+	namedWindow(leftEyeWin, CV_WINDOW_NORMAL);
+	moveWindow(leftEyeWin, 10, 100);
+	namedWindow(rightEyeWin, CV_WINDOW_NORMAL);
+	moveWindow(rightEyeWin, 10, 100);
 	namedWindow(leftEyeFloatWin, CV_WINDOW_NORMAL);
 	moveWindow(leftEyeFloatWin, 10, 100);
+
+	namedWindow("matLeftEye", CV_WINDOW_NORMAL);
+	moveWindow("matLeftEye", 10, 100);
+	//namedWindow("leftEye", CV_WINDOW_NORMAL);
+	//moveWindow("leftEye", 10, 100);
 
 
 	VideoCapture capture(0);
@@ -43,31 +52,32 @@ int main()
 		return 1;
 	}
 
-	Mat cap_img, gray_img;
+	Mat matCapturedImage, matCapturedGrayImage;
 	vector<Rect> faces;
 	while (1)
 	{
-		capture >> cap_img;
+		capture >> matCapturedImage;
 
-		if (cap_img.empty()) {												//sometimes first or second image from camera is empty (camera is loading)
+		if (matCapturedImage.empty()) {											//sometimes first or second image from camera is empty (camera is loading)
 			cout << "captured image is empty";
 			continue;
 		}
 
-		flip(cap_img, cap_img, 1);											//for left eye to be on left side and right eye on the right side image must be vertically flipped
+		flip(matCapturedImage, matCapturedImage, 1);							//for left eye to be on left side and right eye on the right side image must be vertically flipped
 
-		cvtColor(cap_img, gray_img, CV_BGR2GRAY);
-		equalizeHist(gray_img, gray_img);
+		cvtColor(matCapturedImage, matCapturedGrayImage, CV_BGR2GRAY);
+		//equalizeHist(matCapturedGrayImage, matCapturedGrayImage);
 
-		face_cascade.detectMultiScale(gray_img, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE | CV_HAAR_FIND_BIGGEST_OBJECT, Size(150, 150), Size(200, 200));
+		cascFace.detectMultiScale(matCapturedGrayImage, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE | CV_HAAR_FIND_BIGGEST_OBJECT, Size(150, 150), Size(300, 300));
 
-		for (int i = 0; i < faces.size(); i++)
-		{
-			rectangle(cap_img, faces[i], 1234);
-			findEyes(gray_img, faces[i]);
+
+		//for (int i = 0; i < faces.size(); i++)
+		if (faces.size() > 0) {
+			rectangle(matCapturedImage, faces[0], 1234);
+			findEyes(matCapturedGrayImage, faces[0], cascEye);
 		}
 
-		imshow("Result", cap_img);
+		imshow("Result", matCapturedImage);
 
 		char c = waitKey(3);
 		if (c == 27)
@@ -116,8 +126,9 @@ void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, cons
 
 }
 
-void findEyes(Mat frame_gray, Rect face) {
-	Mat faceROI = frame_gray(face);
+
+void findEyes(Mat frame_gray, Rect face, CascadeClassifier cascEye) {
+	Mat matFoundFace = frame_gray(face);
 
 	//-- Find eye regions and draw them
 	int eye_region_width = face.width * (kEyePercentWidth / 100.0);
@@ -126,84 +137,75 @@ void findEyes(Mat frame_gray, Rect face) {
 	Rect leftEyeRegion(face.width*(kEyePercentSide / 100.0), eye_region_top, eye_region_width, eye_region_height);
 	Rect rightEyeRegion(face.width - eye_region_width - face.width*(kEyePercentSide / 100.0), eye_region_top, eye_region_width, eye_region_height);
 
+	Mat matLeftEyeRegion = matFoundFace(leftEyeRegion);
+	Mat matRightEyeRegion = matFoundFace(rightEyeRegion);
 
-	Mat newFace;
-	faceROI.copyTo(newFace);
-	rectangle(newFace, leftEyeRegion, 200);
-	rectangle(newFace, rightEyeRegion, 200);
-	//imshow(myWholeFaceWin, newFace);
+	imshow(leftEyeWin, matLeftEyeRegion);
+	imshow(rightEyeWin, matRightEyeRegion);
 
-	Mat leftEye = faceROI(leftEyeRegion);
-
-	/*circle(leftEye, Point(30, 30), 30, CV_RGB(255, 255, 255), 20, 8, 0);*/
-
-	Mat rightEye = faceROI(rightEyeRegion);
-
-	//imshow(leftEyeWin, leftEye);
-	//imshow(rightEyeWin, rightEye);
-
-	
 
 	if (prevgray.data)
 	{
+		vector<Rect> vecFoundEyes;
+		cascEye.detectMultiScale(matLeftEyeRegion, vecFoundEyes, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
+
+		//Point center(eyes[j].x + eyes[j].width*0.5, eyes[j].y + eyes[j].height*0.5);
+		//int radius = cvRound((eyes[j].width + eyes[j].height)*0.25);
+		//circle(leftEye, center, radius, Scalar(255, 0, 0), 2, 8, 0);
+		
+		if (vecFoundEyes.size() > 0) {			
+			Mat matLeftEye = matLeftEyeRegion(vecFoundEyes[0]);
+
+			circle(matLeftEye, Point(matLeftEye.size().width / 2, matLeftEye.size().height / 2), 43, CV_RGB(255, 255, 255), 40, 8, 0);
+
+			imshow("matLeftEye", matLeftEye);
+		}
+
+
 		Mat flow, cflow;
+		resize(matLeftEyeRegion, matLeftEyeRegion, prevgray.size());
 
-		//Mat Transform;
-		//Mat Transform_avg = Mat::eye(2, 3, CV_64FC1);
-		//Mat warped;
-		//Transform = estimateRigidTransform(leftEye, prevgray, 0);
-		//Transform(Range(0, 2), Range(0, 2)) = Mat::eye(2, 2, CV_64FC1);
-		//Transform_avg += (Transform - Transform_avg) / 2.0;
-		//warpAffine(leftEye, warped, Transform_avg, Size(leftEye.cols, leftEye.rows));
+		//circle(leftEye, Point(prevgray.size().width / 2, prevgray.size().height / 2), 45, CV_RGB(255, 255, 255), 40, 8, 0);
 
-		//imshow("Camw", warped);
-
-		resize(leftEye, leftEye, prevgray.size());
-
-		circle(leftEye, Point(prevgray.size().width / 2, prevgray.size().height / 2), 45, CV_RGB(255, 255, 255), 40, 8, 0);
-
-		//calcOpticalFlowFarneback(prevgray, leftEye, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
+		//calcOpticalFlowFarneback(prevgray, matLeftEyeRegion, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
 		//cvtColor(prevgray, cflow, CV_GRAY2BGR);
 		////drawOptFlowMap(flow, cflow, 16, 1.5, CV_RGB(0, 255, 0));
 		//drawOptFlowMap(flow, cflow, 4, 0, CV_RGB(0, 255, 0));
 		//imshow(leftEyeFloatWin, cflow);
 		////imshow("flow", flow);
 
-		imshow(leftEyeFloatWin + "1", leftEye);
+		//imshow(leftEyeFloatWin + "1", leftEye);
 
-		int darkestPixel = 255;			// 255 - white, 0 - black
+		////int darkestPixel = 255;			// 255 - white, 0 - black
 
-		for (int j = 0; j<leftEye.rows; j++)
-		{
-			for (int i = 0; i<leftEye.cols; i++)
-			{
-				if (leftEye.at<uchar>(j, i) < darkestPixel) {
-					darkestPixel = leftEye.at<uchar>(j, i);
-				}
-			}
-		}
+		////for (int j = 0; j<matLeftEyeRegion.rows; j++)
+		////{
+		////	for (int i = 0; i<matLeftEyeRegion.cols; i++)
+		////	{
+		////		if (matLeftEyeRegion.at<uchar>(j, i) < darkestPixel) {
+		////			darkestPixel = matLeftEyeRegion.at<uchar>(j, i);
+		////		}
+		////	}
+		////}
 
-		for (int j = 0; j<leftEye.rows; j++)
-		{
-			for (int i = 0; i<leftEye.cols; i++)
-			{
-				if (leftEye.at<uchar>(j, i) < darkestPixel + 1) {			//if the pixel is darker
-					leftEye.at<uchar>(j, i) = 0;
-				}
-			}
-		}
+		////for (int j = 0; j<matLeftEyeRegion.rows; j++)
+		////{
+		////	for (int i = 0; i<matLeftEyeRegion.cols; i++)
+		////	{
+		////		if (matLeftEyeRegion.at<uchar>(j, i) < darkestPixel + 1) {			//if the pixel is darker
+		////			matLeftEyeRegion.at<uchar>(j, i) = 0;
+		////		}
+		////	}
+		////}
 
-		cout << darkestPixel;
-		cout << "\n";
+		////cout << darkestPixel;
+		////cout << "\n";
 
-		cv::threshold(leftEye, leftEye, 0, 100, cv::THRESH_BINARY);
+		////cv::threshold(matLeftEyeRegion, matLeftEyeRegion, 0, 100, cv::THRESH_BINARY);
 
-		imshow(leftEyeFloatWin, leftEye);
+		//imshow(leftEyeFloatWin, matLeftEyeRegion);
 	}
 
 	
-	swap(prevgray, leftEye);
-	
-
-	
+	swap(prevgray, matLeftEyeRegion);
 }
