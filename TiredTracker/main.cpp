@@ -13,10 +13,20 @@
 using namespace cv;
 using namespace std;
 
+/* Public variables */
 Mat prevgray;
 
-void findEyes(Mat frame_gray, Rect face, CascadeClassifier cascEye);
+Mat previousFace;
+Mat currentFace;
+
+/* Functions */
+void findEyes(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace);
 void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color);
+void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace, Rect *detectedFaceRegion);
+void calcFlow(const Mat& flow, Mat& cflowmap, double scale);
+Rect findBiggestFace(Mat matCapturedGrayImage, CascadeClassifier cascFace);
+
+/**************************************************************************   main   **************************************************************************/
 
 int main()
 {
@@ -30,20 +40,23 @@ int main()
 		return 1;
 	}
 
-	//namedWindow(myWholeFaceWin, CV_WINDOW_NORMAL);
-	//moveWindow(myWholeFaceWin, 10, 100);
-	namedWindow(leftEyeWin, CV_WINDOW_NORMAL);
-	moveWindow(leftEyeWin, 10, 100);
-	namedWindow(rightEyeWin, CV_WINDOW_NORMAL);
-	moveWindow(rightEyeWin, 10, 100);
-	namedWindow(leftEyeFloatWin, CV_WINDOW_NORMAL);
-	moveWindow(leftEyeFloatWin, 10, 100);
+	Rect detectedFaceRegion;
 
-	namedWindow("matLeftEye", CV_WINDOW_NORMAL);
-	moveWindow("matLeftEye", 10, 100);
-	//namedWindow("leftEye", CV_WINDOW_NORMAL);
-	//moveWindow("leftEye", 10, 100);
+	////namedWindow(myWholeFaceWin, CV_WINDOW_NORMAL);
+	////moveWindow(myWholeFaceWin, 10, 100);
+	//namedWindow(leftEyeWin, CV_WINDOW_NORMAL);
+	//moveWindow(leftEyeWin, 10, 100);
+	//namedWindow(rightEyeWin, CV_WINDOW_NORMAL);
+	//moveWindow(rightEyeWin, 10, 100);
+	//namedWindow(leftEyeFloatWin, CV_WINDOW_NORMAL);
+	//moveWindow(leftEyeFloatWin, 10, 100);
 
+	//namedWindow("matLeftEye", CV_WINDOW_NORMAL);
+	//moveWindow("matLeftEye", 10, 100);
+	////namedWindow("leftEye", CV_WINDOW_NORMAL);
+	////moveWindow("leftEye", 10, 100);
+
+	namedWindow("Result", CV_WINDOW_NORMAL);
 
 	VideoCapture capture(0);
 	if (!capture.isOpened())
@@ -52,10 +65,11 @@ int main()
 		return 1;
 	}
 
-	Mat matCapturedImage, matCapturedGrayImage;
-	vector<Rect> faces;
+	Mat matCapturedImage;
+
 	while (1)
 	{
+		Mat matCapturedGrayImage;
 		capture >> matCapturedImage;
 
 		if (matCapturedImage.empty()) {											//sometimes first or second image from camera is empty (camera is loading)
@@ -64,32 +78,29 @@ int main()
 		}
 
 		flip(matCapturedImage, matCapturedImage, 1);							//for left eye to be on left side and right eye on the right side image must be vertically flipped
-
 		cvtColor(matCapturedImage, matCapturedGrayImage, CV_BGR2GRAY);
 		//equalizeHist(matCapturedGrayImage, matCapturedGrayImage);
 
-		cascFace.detectMultiScale(matCapturedGrayImage, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE | CV_HAAR_FIND_BIGGEST_OBJECT, Size(150, 150), Size(300, 300));
-
-
-		//for (int i = 0; i < faces.size(); i++)
-		if (faces.size() > 0) {
-			rectangle(matCapturedImage, faces[0], 1234);
-			findEyes(matCapturedGrayImage, faces[0], cascEye);
-		}
-
-		imshow("Result", matCapturedImage);
+		//findEyes(matCapturedGrayImage, matCapturedImage, cascEye, cascFace);
+		headTracing(matCapturedGrayImage, matCapturedImage, cascEye, cascFace, &detectedFaceRegion);
 
 		char c = waitKey(3);
-		if (c == 27)
+		if (c == 27)															//pressed ESC
 			break;
 	}
 	return 0;
 }
 
+
+/**************************************************************************   euclideanDist   **************************************************************************/
+
 float euclideanDist(Point& p, Point& q) {
 	Point diff = p - q;
 	return cv::sqrt(diff.x*diff.x + diff.y*diff.y);
 }
+
+
+/**************************************************************************   drawOptFlowMap   **************************************************************************/
 
 void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color)
 {
@@ -123,12 +134,91 @@ void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, cons
 			}
 		}
 	}
+}
+
+
+/**************************************************************************   drawOptFlowMap   **************************************************************************/
+
+void calcFlow(const Mat& flow, Mat& cflowmap, int step)
+{
+	int globalMovementX = 0;
+	int globalMovementY = 0;
+	for (int y = 0; y < cflowmap.rows; y += step)
+	{
+		for (int x = 0; x < cflowmap.cols; x += step)
+		{
+			const Point2f& fxy = flow.at<Point2f>(y, x);
+
+			globalMovementX = globalMovementX + fxy.x;
+			globalMovementY = globalMovementY + fxy.y;
+			//int x2 = cvRound(x + fxy.x);
+			//int y2 = cvRound(y + fxy.y);
+		}
+	}
+	cout << "X: ";
+	cout << globalMovementX / (cflowmap.cols * cflowmap.rows);
+	cout << "\n";
+
+	cout << "Y: ";
+	cout << globalMovementY / (cflowmap.rows * cflowmap.cols);
+	cout << "\n\n";
 
 }
 
 
-void findEyes(Mat frame_gray, Rect face, CascadeClassifier cascEye) {
-	Mat matFoundFace = frame_gray(face);
+/**************************************************************************   headTracing   **************************************************************************/
+
+void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace, Rect *detectedFaceRegion) {
+	
+	Rect face = findBiggestFace(matCapturedGrayImage, cascFace);
+	if (face.width == 0 && face.height == 0) {
+		imshow("Result", matCapturedImage);				// just face
+		return;											// no face was found
+	}
+	
+	if (detectedFaceRegion->height == 0) {
+		*detectedFaceRegion = face;
+		previousFace = matCapturedGrayImage(face);			//TODO stale sa meni previous face aj ked je tuto iba raz nadefinovana -> preco?
+		cout << "fist time";
+	}
+	else {
+		//uz je raz zachyteny frame s tvarou; teraz idem hladat pohyb oproti predchadzajucemu v tejto ploche a 
+		
+		currentFace = matCapturedGrayImage(*detectedFaceRegion);
+		imshow("currentFace", currentFace);
+		imshow("previousFace", previousFace);
+
+		Mat flow, cflow;
+		calcOpticalFlowFarneback(previousFace, currentFace, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
+
+		cvtColor(previousFace, cflow, CV_GRAY2BGR);
+		calcFlow(flow, cflow, 1);
+
+		rectangle(matCapturedImage, *detectedFaceRegion, 12);
+
+		swap(previousFace, currentFace);
+	}
+
+	rectangle(matCapturedImage, face, 1234);			//make rectangle around face
+	imshow("Result", matCapturedImage);					//show face with rectangle
+
+	
+}
+
+
+/**************************************************************************   findEyes   **************************************************************************/
+
+void findEyes(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace) {
+
+	Rect face = findBiggestFace(matCapturedGrayImage, cascFace);
+	if (face.width == 0 && face.height == 0) {
+		return;											// no face was found
+	}
+
+	rectangle(matCapturedImage, face, 1234);
+	imshow("Result", matCapturedImage);
+
+	Mat matFoundFace = matCapturedGrayImage(face);
 
 	//-- Find eye regions and draw them
 	int eye_region_width = face.width * (kEyePercentWidth / 100.0);
@@ -208,4 +298,21 @@ void findEyes(Mat frame_gray, Rect face, CascadeClassifier cascEye) {
 
 	
 	swap(prevgray, matLeftEyeRegion);
+}
+
+
+
+Rect findBiggestFace(Mat matCapturedGrayImage, CascadeClassifier cascFace)  {
+
+	Rect returnValue;
+
+	vector<Rect> faces;
+	cascFace.detectMultiScale(matCapturedGrayImage, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE | CV_HAAR_FIND_BIGGEST_OBJECT, Size(150, 150), Size(300, 300));
+
+	if (faces.size() > 0) {
+		return faces[0];
+	}
+	else {
+		return returnValue;
+	}
 }
