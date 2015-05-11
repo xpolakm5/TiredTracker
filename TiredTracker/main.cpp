@@ -22,9 +22,10 @@ Mat currentFace;
 /* Functions */
 void findEyes(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace);
 void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color);
-void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace, Rect *detectedFaceRegion);
-void calcFlow(const Mat& flow, Mat& cflowmap, double scale, int globalMovementX, int globalMovementY);
+void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace, Rect &detectedFaceRegion);
+void calcFlow(const Mat& flow, Mat& cflowmap, double scale, int &globalMovementX, int &globalMovementY);
 Rect findBiggestFace(Mat matCapturedGrayImage, CascadeClassifier cascFace);
+void eyeTracking(Mat &matCurrentEye, Mat &matPreviousEye);
 
 /**************************************************************************   main   **************************************************************************/
 
@@ -82,7 +83,7 @@ int main()
 		//equalizeHist(matCapturedGrayImage, matCapturedGrayImage);
 
 		//findEyes(matCapturedGrayImage, matCapturedImage, cascEye, cascFace);
-		headTracing(matCapturedGrayImage, matCapturedImage, cascEye, cascFace, &detectedFaceRegion);
+		headTracing(matCapturedGrayImage, matCapturedImage, cascEye, cascFace, detectedFaceRegion);
 
 		char c = waitKey(3);
 		if (c == 27)															//pressed ESC
@@ -137,30 +138,36 @@ void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, cons
 }
 
 
-/**************************************************************************   drawOptFlowMap   **************************************************************************/
+/**************************************************************************   calcFlow   **************************************************************************/
 
+///<summary> Vypocita pohyb tvare a v premennych globalMovementX a globalMovementY vrati vypocitane hodnoty </summary>
 void calcFlow(const Mat& flow, Mat& cflowmap, int step, int &globalMovementX, int &globalMovementY)
 {
-	globalMovementX = 0;
-	globalMovementY = 0;
+	int localMovementX = 0;
+	int localMovementY = 0;
+
 	for (int y = 0; y < cflowmap.rows; y += step)
 	{
 		for (int x = 0; x < cflowmap.cols; x += step)
 		{
 			const Point2f& fxy = flow.at<Point2f>(y, x);
 
-			globalMovementX = globalMovementX + fxy.x;
-			globalMovementY = globalMovementY + fxy.y;
+			localMovementX = localMovementX + fxy.x;
+			localMovementY = localMovementY + fxy.y;
 			//int x2 = cvRound(x + fxy.x);
 			//int y2 = cvRound(y + fxy.y);
 		}
 	}
+
+	globalMovementX = (localMovementX / (cflowmap.cols * cflowmap.rows))*2;
+	globalMovementY = (localMovementY / (cflowmap.rows * cflowmap.cols))*2;
+
 	cout << "X: ";
-	cout << globalMovementX / (cflowmap.cols * cflowmap.rows);
+	cout << globalMovementX;
 	cout << "\n";
 
 	cout << "Y: ";
-	cout << globalMovementY / (cflowmap.rows * cflowmap.cols);
+	cout << globalMovementY;
 	cout << "\n\n";
 
 }
@@ -168,7 +175,7 @@ void calcFlow(const Mat& flow, Mat& cflowmap, int step, int &globalMovementX, in
 
 /**************************************************************************   headTracing   **************************************************************************/
 
-void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace, Rect *detectedFaceRegion) {
+void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace, Rect &detectedFaceRegion) {
 	
 	Rect face = findBiggestFace(matCapturedGrayImage, cascFace);
 	if (face.width == 0 && face.height == 0) {
@@ -176,15 +183,16 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 		return;											// no face was found
 	}
 	
-	if (detectedFaceRegion->height == 0) {
-		*detectedFaceRegion = face;
-		previousFace = matCapturedGrayImage(face);			//TODO stale sa meni previous face aj ked je tuto iba raz nadefinovana -> preco?
+	if (detectedFaceRegion.height == 0) {
+		detectedFaceRegion = face;
+		previousFace = matCapturedGrayImage(face);
 		cout << "fist time";
 	}
 	else {
-		//uz je raz zachyteny frame s tvarou; teraz idem hladat pohyb oproti predchadzajucemu v tejto ploche a 
+		//uz je raz zachyteny frame s tvarou; teraz idem hladat pohyb oproti predchadzajucemu v tejto ploche
 		
-		currentFace = matCapturedGrayImage(*detectedFaceRegion);
+		currentFace = matCapturedGrayImage(detectedFaceRegion);
+
 		imshow("currentFace", currentFace);
 		imshow("previousFace", previousFace);
 
@@ -197,14 +205,27 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 
 		calcFlow(flow, cflow, 1, globalMovementX, globalMovementY);
 
-		rectangle(matCapturedImage, *detectedFaceRegion, 12);
+		putText(currentFace, "text " + to_string(globalMovementX), cvPoint(30, 30), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
 
-		swap(previousFace, currentFace);
+		detectedFaceRegion.x = detectedFaceRegion.x + globalMovementX;		//na zaklade analyzovaneho posunu previousFace a currentFace sa nastavia nove hodnoty, kde sa tvar nachadza
+		detectedFaceRegion.y = detectedFaceRegion.y + globalMovementY;
+
+		rectangle(matCapturedImage, detectedFaceRegion, 12);				//na povodnom obrazku sa ukaze novo posunuty rectangle
+		currentFace = matCapturedGrayImage(detectedFaceRegion);				//currentFace sa posunie na novu poziciu, na ktoru podla porovnania s previousFace patri
+
+		/* teraz je nutne porovnat predch. tvar a aktualnu a pozriet float uz konkretnych oci */
+
+		swap(previousFace, currentFace);									//previousFace je od teraz currentFace
 	}
 
-	rectangle(matCapturedImage, face, 1234);			//make rectangle around face
-	imshow("Result", matCapturedImage);					//show face with rectangle
+	rectangle(matCapturedImage, face, 1234);								//make rectangle around face
+	imshow("Result", matCapturedImage);										//show face with rectangle
 
+	
+}
+
+
+void eyeTracking(Mat &matCurrentFace, Mat &matPreviousFace) {
 	
 }
 
