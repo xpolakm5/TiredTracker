@@ -23,7 +23,7 @@ Mat currentFace;
 void findEyes(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace);
 void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color);
 void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace, Rect *detectedFaceRegion);
-void calcFlow(const Mat& flow, Mat& cflowmap, double scale);
+void calcFlow(const Mat& flow, Mat& cflowmap, double scale, int globalMovementX, int globalMovementY);
 Rect findBiggestFace(Mat matCapturedGrayImage, CascadeClassifier cascFace);
 
 /**************************************************************************   main   **************************************************************************/
@@ -139,10 +139,10 @@ void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, cons
 
 /**************************************************************************   drawOptFlowMap   **************************************************************************/
 
-void calcFlow(const Mat& flow, Mat& cflowmap, int step)
+void calcFlow(const Mat& flow, Mat& cflowmap, int step, int &globalMovementX, int &globalMovementY)
 {
-	int globalMovementX = 0;
-	int globalMovementY = 0;
+	globalMovementX = 0;
+	globalMovementY = 0;
 	for (int y = 0; y < cflowmap.rows; y += step)
 	{
 		for (int x = 0; x < cflowmap.cols; x += step)
@@ -192,7 +192,10 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 		calcOpticalFlowFarneback(previousFace, currentFace, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
 
 		cvtColor(previousFace, cflow, CV_GRAY2BGR);
-		calcFlow(flow, cflow, 1);
+
+		int globalMovementX, globalMovementY;
+
+		calcFlow(flow, cflow, 1, globalMovementX, globalMovementY);
 
 		rectangle(matCapturedImage, *detectedFaceRegion, 12);
 
