@@ -19,6 +19,10 @@ Mat prevgray;
 Mat previousFace;
 Mat currentFace;
 
+bool leftEyeOpen = true;
+bool rightEyeOpen = true;
+
+
 /* Functions */
 void findEyes(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifier cascEye, CascadeClassifier cascFace);
 void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color);
@@ -26,6 +30,7 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 void calcFlow(const Mat& flow, Mat& cflowmap, double scale, int &globalMovementX, int &globalMovementY);
 Rect findBiggestFace(Mat matCapturedGrayImage, CascadeClassifier cascFace);
 void eyeTracking(Mat &matCurrentEye, Mat &matPreviousEye);
+void getEyesFromFace(Mat &matFace, Mat &matLeftEye, Mat &matRightEye);
 
 /**************************************************************************   main   **************************************************************************/
 
@@ -161,17 +166,57 @@ void calcFlow(const Mat& flow, Mat& cflowmap, int step, int &globalMovementX, in
 
 	globalMovementX = (localMovementX / (cflowmap.cols * cflowmap.rows))*2;
 	globalMovementY = (localMovementY / (cflowmap.rows * cflowmap.cols))*2;
-
-	cout << "X: ";
-	cout << globalMovementX;
-	cout << "\n";
-
-	cout << "Y: ";
-	cout << globalMovementY;
-	cout << "\n\n";
-
 }
 
+
+/**************************************************************************   calcFlow   **************************************************************************/
+
+///<summary> Vypocita pohyb tvare a v premennych globalMovementX a globalMovementY vrati vypocitane hodnoty </summary>
+void calcFlowEyes(const Mat& flow, Mat& cflowmap, int step, int &globalMovementX, int &globalMovementY)
+{
+	int localMovementX = 0;
+	int localMovementY = 0;
+
+	for (int y = 0; y < cflowmap.rows; y += step)
+	{
+		for (int x = 0; x < cflowmap.cols; x += step)
+		{
+			const Point2f& fxy = flow.at<Point2f>(y, x);
+
+			localMovementX = localMovementX + fxy.x;
+			localMovementY = localMovementY + fxy.y;
+			//int x2 = cvRound(x + fxy.x);
+			//int y2 = cvRound(y + fxy.y);
+		}
+	}
+
+
+	if (localMovementY == 0) {
+		return;
+	}
+
+	if (localMovementY > 0 && leftEyeOpen) {
+		leftEyeOpen = false;
+		cout << "IS CLOSED\n";
+		cout << '\a';
+	}
+	else if (!leftEyeOpen){
+		leftEyeOpen = true;
+		cout << "IS OPEN\n";
+		cout << '\a';
+	}
+
+	//cout << "X left eye local: ";
+	//cout << localMovementX;
+	//cout << "\n";
+
+	//cout << "Y left eye local: ";
+	//cout << localMovementY;
+	//cout << "\n\n";
+
+	globalMovementX = (localMovementX / (cflowmap.cols * cflowmap.rows)) * 2;
+	globalMovementY = (localMovementY / (cflowmap.rows * cflowmap.cols)) * 2;
+}
 
 /**************************************************************************   headTracing   **************************************************************************/
 
@@ -205,8 +250,17 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 
 		calcFlow(flow, cflow, 1, globalMovementX, globalMovementY);
 
-		putText(currentFace, "text " + to_string(globalMovementX), cvPoint(30, 30), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+		//cout << "X: ";
+		//cout << globalMovementX;
+		//cout << "\n";
 
+		//cout << "Y: ";
+		//cout << globalMovementY;
+		//cout << "\n\n";
+
+		//putText(currentFace, "text " + to_string(globalMovementX), cvPoint(30, 30), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+
+		//TODO osetrit ked ide rectangle mimo zobrazenej plochy
 		detectedFaceRegion.x = detectedFaceRegion.x + globalMovementX;		//na zaklade analyzovaneho posunu previousFace a currentFace sa nastavia nove hodnoty, kde sa tvar nachadza
 		detectedFaceRegion.y = detectedFaceRegion.y + globalMovementY;
 
@@ -214,6 +268,8 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 		currentFace = matCapturedGrayImage(detectedFaceRegion);				//currentFace sa posunie na novu poziciu, na ktoru podla porovnania s previousFace patri
 
 		/* teraz je nutne porovnat predch. tvar a aktualnu a pozriet float uz konkretnych oci */
+
+		eyeTracking(currentFace, previousFace);
 
 		swap(previousFace, currentFace);									//previousFace je od teraz currentFace
 	}
@@ -225,10 +281,60 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 }
 
 
+/**************************************************************************   eyeTracking   **************************************************************************/
+
 void eyeTracking(Mat &matCurrentFace, Mat &matPreviousFace) {
-	
+
+	//TODO tuto pokracovat - pouzit geteyesfromface a vytiahnut si len oci a nasledne funkciu dat na flow
+
+	Mat matLeftEyePrevious;
+	Mat matRightEyePrevious;
+	Mat matLeftEyeCurrent;
+	Mat matRightEyeCurrent;
+
+	getEyesFromFace(matPreviousFace, matLeftEyePrevious, matRightEyePrevious);
+	getEyesFromFace(matCurrentFace, matLeftEyeCurrent, matRightEyeCurrent);
+
+	imshow("matLeftEyePrevious", matLeftEyePrevious);
+	imshow("matRightEyePrevious", matRightEyePrevious);
+	imshow("matLeftEyeCurrent", matLeftEyeCurrent);
+	imshow("matRightEyeCurrent", matRightEyeCurrent);
+
+
+	Mat leftFlow, leftCflow;
+	calcOpticalFlowFarneback(matLeftEyePrevious, matLeftEyeCurrent, leftFlow, 0.5, 3, 15, 3, 5, 1.2, 0);
+
+	cvtColor(matLeftEyePrevious, leftCflow, CV_GRAY2BGR);
+
+	int leftGlobalMovementX, leftGlobalMovementY;
+
+	calcFlowEyes(leftFlow, leftCflow, 1, leftGlobalMovementX, leftGlobalMovementY);
+
+	//cout << "X left eye: ";
+	//cout << leftGlobalMovementX;
+	//cout << "\n";
+
+	//cout << "Y left eye: ";
+	//cout << leftGlobalMovementY;
+	//cout << "\n\n";
 }
 
+/**************************************************************************   getEyesFromFace   **************************************************************************/
+
+///<description>get left and right eye from face (in one frame)</description>
+void getEyesFromFace(Mat &matFace, Mat &matLeftEye, Mat &matRightEye) {
+
+	Size faceSize = matFace.size();
+
+	int eye_region_width = faceSize.width * (kEyePercentWidth / 100.0);
+	int eye_region_height = faceSize.width * (kEyePercentHeight / 100.0);
+	int eye_region_top = faceSize.height * (kEyePercentTop / 100.0);
+	Rect leftEyeRegion(faceSize.width*(kEyePercentSide / 100.0), eye_region_top, eye_region_width, eye_region_height);
+	Rect rightEyeRegion(faceSize.width - eye_region_width - faceSize.width*(kEyePercentSide / 100.0), eye_region_top, eye_region_width, eye_region_height);
+
+	matLeftEye = matFace(leftEyeRegion);
+	matRightEye = matFace(rightEyeRegion);
+}
 
 /**************************************************************************   findEyes   **************************************************************************/
 
