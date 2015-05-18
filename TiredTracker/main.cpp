@@ -22,6 +22,8 @@ Mat currentFace;
 bool leftEyeOpen = true;
 bool rightEyeOpen = true;
 int calibrationFace = calibrationDefault;
+int blinkNumberLeft = 0;
+int blinkNumberRight = 0;
 
 
 /* Functions */
@@ -32,7 +34,7 @@ void calcFlow(const Mat& flow, Mat& cflowmap, double scale, int &globalMovementX
 Rect findBiggestFace(Mat matCapturedGrayImage, CascadeClassifier cascFace);
 void eyeTracking(Mat &matCurrentEye, Mat &matPreviousEye);
 void getEyesFromFace(Mat &matFace, Mat &matLeftEye, Mat &matRightEye);
-void detectBlink(Mat &matEyePrevious, Mat &matEyeCurrent, String eye, bool &eyeOpen);
+void detectBlink(Mat &matEyePrevious, Mat &matEyeCurrent, String eye, bool &eyeOpen, int &blinkNumber);
 
 /**************************************************************************   main   **************************************************************************/
 
@@ -100,49 +102,49 @@ int main()
 }
 
 
-/**************************************************************************   euclideanDist   **************************************************************************/
-
-float euclideanDist(Point& p, Point& q) {
-	Point diff = p - q;
-	return cv::sqrt(diff.x*diff.x + diff.y*diff.y);
-}
-
-
-/**************************************************************************   drawOptFlowMap   **************************************************************************/
-
-void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color)
-{
-	//float flx = 0;
-	//float fly = 0;
-	for (int y = 0; y < cflowmap.rows; y += step)
-	{
-		for (int x = 0; x < cflowmap.cols; x += step)
-		{
-			const Point2f& fxy = flow.at<Point2f>(y, x);
-
-			int x2 = cvRound(x + fxy.x);
-			int y2 = cvRound(y + fxy.y);
-
-			//line(cflowmap, Point(x, y), Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
-			//circle(cflowmap, Point(x, y), 2, color, -1);
-			//float flx = x - fxy.x;
-			//cout << fxy.x;
-			//cout << "\n";
-			float distance = euclideanDist(Point(x, y), Point(x2, y2));
-			//cout << distance;
-
-			if (distance > 1.5) {
-				if (fxy.y < 0) {
-					line(cflowmap, Point(x, y), Point(x2, y2), CV_RGB(0, 0, 255));			//modre, ukazuje pohyb smerom vlavo (fxy.x < 0) alebo hore (fxy.y < 0)
-					//circle(cflowmap, Point(x, y), 2, color, -1);
-				}
-				else {
-					line(cflowmap, Point(x, y), Point(x2, y2), color);
-				}
-			}
-		}
-	}
-}
+///**************************************************************************   euclideanDist   **************************************************************************/
+//
+//float euclideanDist(Point& p, Point& q) {
+//	Point diff = p - q;
+//	return cv::sqrt(diff.x*diff.x + diff.y*diff.y);
+//}
+//
+//
+///**************************************************************************   drawOptFlowMap   **************************************************************************/
+//
+//void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double scale, const Scalar& color)
+//{
+//	//float flx = 0;
+//	//float fly = 0;
+//	for (int y = 0; y < cflowmap.rows; y += step)
+//	{
+//		for (int x = 0; x < cflowmap.cols; x += step)
+//		{
+//			const Point2f& fxy = flow.at<Point2f>(y, x);
+//
+//			int x2 = cvRound(x + fxy.x);
+//			int y2 = cvRound(y + fxy.y);
+//
+//			//line(cflowmap, Point(x, y), Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
+//			//circle(cflowmap, Point(x, y), 2, color, -1);
+//			//float flx = x - fxy.x;
+//			//cout << fxy.x;
+//			//cout << "\n";
+//			float distance = euclideanDist(Point(x, y), Point(x2, y2));
+//			//cout << distance;
+//
+//			if (distance > 1.5) {
+//				if (fxy.y < 0) {
+//					line(cflowmap, Point(x, y), Point(x2, y2), CV_RGB(0, 0, 255));			//modre, ukazuje pohyb smerom vlavo (fxy.x < 0) alebo hore (fxy.y < 0)
+//					//circle(cflowmap, Point(x, y), 2, color, -1);
+//				}
+//				else {
+//					line(cflowmap, Point(x, y), Point(x2, y2), color);
+//				}
+//			}
+//		}
+//	}
+//}
 
 
 /**************************************************************************   calcFlow   **************************************************************************/
@@ -247,7 +249,6 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 		/* teraz je nutne porovnat predch. tvar a aktualnu a pozriet float uz konkretnych oci */
 
 		eyeTracking(currentFace, previousFace);
-
 		swap(previousFace, currentFace);									//previousFace je od teraz currentFace
 	}
 
@@ -255,17 +256,24 @@ void headTracing(Mat matCapturedGrayImage, Mat matCapturedImage, CascadeClassifi
 
 	if (leftEyeOpen) {
 		putText(matCapturedImage, "Left eye open", cvPoint(20, 20), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(50, 50, 50), 1, CV_AA);
+		circle(matCapturedImage, Point(50, 100), 20, Scalar(102, 255, 51), 40, 8, 0);
 	}
 	else {
 		putText(matCapturedImage, "Left eye closed", cvPoint(20, 20), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(50, 50, 50), 1, CV_AA);
+		circle(matCapturedImage, Point(50, 100), 20, Scalar(0, 0, 255), 40, 8, 0);
 	}
 
 	if (rightEyeOpen) {
 		putText(matCapturedImage, "Right eye open", cvPoint(450, 20), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(50, 50, 50), 1, CV_AA);
+		circle(matCapturedImage, Point(580, 100), 20, Scalar(102, 255, 51), 40, 8, 0);
 	}
 	else {
 		putText(matCapturedImage, "Right eye closed", cvPoint(450, 20), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(50, 50, 50), 1, CV_AA);
+		circle(matCapturedImage, Point(580, 100), 20, Scalar(0, 0, 255), 40, 8, 0);
 	}
+
+	putText(matCapturedImage, to_string(blinkNumberLeft), cvPoint(40, 40), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(100, 100, 100), 1, CV_AA);
+	putText(matCapturedImage, to_string(blinkNumberRight), cvPoint(530, 40), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(100, 100, 100), 1, CV_AA);
 
 	imshow("Result", matCapturedImage);										//show face with rectangle
 }
@@ -289,12 +297,12 @@ void eyeTracking(Mat &matCurrentFace, Mat &matPreviousFace) {
 	imshow("matRightEyeCurrent", matRightEyeCurrent);
 
 
-	detectBlink(matLeftEyePrevious, matLeftEyeCurrent, "left", leftEyeOpen);
-	detectBlink(matRightEyePrevious, matRightEyeCurrent, "right", rightEyeOpen);
+	detectBlink(matLeftEyePrevious, matLeftEyeCurrent, "left", leftEyeOpen, blinkNumberLeft);
+	detectBlink(matRightEyePrevious, matRightEyeCurrent, "right", rightEyeOpen, blinkNumberRight);
 }
 
 
-void detectBlink(Mat &matEyePrevious, Mat &matEyeCurrent, String eye, bool &eyeOpen) {
+void detectBlink(Mat &matEyePrevious, Mat &matEyeCurrent, String eye, bool &eyeOpen, int &blinkNumber) {
 	Mat leftFlow, leftCflow;
 	calcOpticalFlowFarneback(matEyePrevious, matEyeCurrent, leftFlow, 0.5, 3, 15, 3, 5, 1.2, 0);
 	cvtColor(matEyePrevious, leftCflow, CV_GRAY2BGR);
@@ -307,8 +315,9 @@ void detectBlink(Mat &matEyePrevious, Mat &matEyeCurrent, String eye, bool &eyeO
 		return;
 	}
 
-	if (movementY > 0 && eyeOpen) {
+	if (movementY > 0 && eyeOpen) {						//oko je zavrete
 		eyeOpen = false;
+		blinkNumber = blinkNumber + 1;
 		cout << eye;
 		cout << "IS CLOSED, localmovementX=";
 		cout << movementX;
@@ -317,7 +326,7 @@ void detectBlink(Mat &matEyePrevious, Mat &matEyeCurrent, String eye, bool &eyeO
 		cout << "\n";
 		cout << '\a';
 	}
-	else if (movementY < 0 && !eyeOpen){
+	else if (movementY < 0 && !eyeOpen){				//oko je otvorene
 		eyeOpen = true;
 		cout << eye;
 		cout << "IS OPEN, localmovementX=";
@@ -325,7 +334,7 @@ void detectBlink(Mat &matEyePrevious, Mat &matEyeCurrent, String eye, bool &eyeO
 		cout << ", localmovementY=";
 		cout << movementY;
 		cout << "\n";
-		cout << '\a';
+		//cout << '\a';
 	}
 }
 
